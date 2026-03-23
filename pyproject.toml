@@ -1,18 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "gettree"
-version = "1.0.1"
+dynamic = ["version"]
 description = "Smart folder tree CLI with gitignore support"
-authors = [{name = "Ash"}]
+authors = [{ name = "Ash Kernel" }]
 readme = "README.md"
 requires-python = ">=3.8"
+license = { text = "MIT" }
+
 dependencies = [
     "pathspec",
     "colorama",
     "rich"
 ]
-dynamic = ["version"]
-
-license = {text = "MIT"}
 
 [project.scripts]
 gettree = "gettree.cli:main"
@@ -21,4 +24,4 @@ gettree = "gettree.cli:main"
 include = ["gettree"]
 
 [tool.setuptools.dynamic]
-version = {attr = "gettree.__version__"}
+version = { attr = "gettree.__version__" }
