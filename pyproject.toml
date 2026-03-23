@@ -1,0 +1,24 @@
+[project]
+name = "gettree"
+version = "1.0.1"
+description = "Smart folder tree CLI with gitignore support"
+authors = [{name = "Ash"}]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "pathspec",
+    "colorama",
+    "rich"
+]
+dynamic = ["version"]
+
+license = {text = "MIT"}
+
+[project.scripts]
+gettree = "gettree.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["gettree"]
+
+[tool.setuptools.dynamic]
+version = {attr = "gettree.__version__"}
