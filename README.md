@@ -1,100 +1,143 @@
 <div align="center">
 
-# 🌳 gettree
+# gettree
 
-<img src="https://raw.githubusercontent.com/ash-kernel/gettree/main/assets/logo.png" width="170"/>
+<img src="https://raw.githubusercontent.com/ash-kernel/gettree/main/assets/logo.png" width="140"/>
 
-### A smarter `tree` CLI for developers
-
-Generate clean folder structures with `.gitignore` support, colors, icons, and more.
+**Modern tree CLI with ignore support, filtering, and exports**
 
 <br/>
 
 <img src="https://img.shields.io/badge/Python-CLI-blue?logo=python" />
 <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey" />
-<img src="https://img.shields.io/badge/Status-Stable-success" />
 <img src="https://img.shields.io/badge/License-MIT-green" />
 <a href="https://pypi.org/project/gettree/">
-  <img src="https://img.shields.io/pypi/v/gettree?color=blue&label=PyPI" />
+  <img src="https://img.shields.io/pypi/v/gettree?label=PyPI" />
 </a>
+
 </div>
 
 ---
 
-## ⚡ Features
+## Overview
 
-- 📂 Clean tree output  
-- 🧠 Respects `.gitignore`  
-- 🚫 Auto ignores `.git`, `node_modules`, etc.  
-- 🎨 Color support  
-- 🧩 Icons (VS Code style)  
-- 📦 File size display  
-- 🔢 Depth control  
-- 🔄 Live watch mode  
-- 🖥️ Interactive TUI view  
-- 📝 Markdown export (for README)
+`gettree` is a fast CLI to visualize directory structures with:
+- ignore rules
+- filterings
+- sorting
+- multiple export formats
 
 ---
 
-## 🚀 Install
+## Install
 
-### 📦 From PyPI (recommended)
-```bash
-pip install gettree
-```
+    pip install gettree
 
-### 🛠️ From GitHub (latest version)
-```bash
-pip install git+https://github.com/ash-kernel/gettree.git
-```
----
+or
 
-## 🧪 Usage
-
-```bash
-gettree                    # current folder
-gettree myproject         # specific path
-
-gettree . --depth 2
-gettree . --size
-gettree . --icons
-gettree . --color
-
-gettree . --markdown
-gettree . --output tree.txt
-
-gettree . --tui
-gettree . --watch
-```
+    pip install git+https://github.com/ash-kernel/gettree.git
 
 ---
 
-## 🧠 Example
+## Usage
 
-```bash
-gettree . --depth 2 --icons --color
-```
-
-```
-📁 src
-├── 🐍 main.py
-└── 📄 README.md
-```
+    gettree [path] [options]
 
 ---
 
-## 🔥 More from Me
+## Examples
 
-### 🌶️ SpiceDeck  
-A modern lightweight game launcher  
-👉 https://github.com/ash-kernel/spicedeck
-
-### 🎮 FitGirl API  
-Fast & open API for repack scraping  
-👉 https://github.com/ash-kernel/fitgirl-api
+    gettree .
+    gettree . --color --icons --size
+    gettree . --depth 2
+    gettree . --filter "\.py$"
+    gettree . --sort size --size
+    gettree . --json -o tree.json
+    gettree . --markdown -o tree.md
 
 ---
 
-## ⭐ Support
+## Features
 
-If you like this project, drop a ⭐ on GitHub — it helps a lot!
+- `.gitignore` + `.gettreeignore`
+- regex filtering (`--filter`)
+- sorting (`name | size | type`)
+- file size + depth control
+- JSON / CSV / Markdown export
+- stats (files, folders, size, time)
+- watch mode + TUI
+
+---
+
+## Options
+
+Display:
+    --color, -c
+    --icons
+    --size, -s
+    --depth, -d N
+    --fullpath
+    --stats
+    --dirs-only
+    --files-only
+    --hidden
+
+Output:
+    --json
+    --csv
+    --markdown
+    --output, -o FILE
+    --flat
+    --count
+
+Advanced:
+    --filter, -f REGEX
+    --sort TYPE
+    --ignore, -i PATTERN
+    --no-ignore
+    --min-size SIZE
+    --max-size SIZE
+    --watch, -w
+    --tui
+    --no-color
+
+---
+
+## Ignore Rules
+
+Supports:
+    .gitignore
+    .gettreeignore
+
+Example:
+    *.log
+    dist/
+    temp/
+
+---
+
+## Example Output
+
+    src
+    ├── main.py
+    └── README.md
+
+---
+
+## License
+
+MIT
+
+
+## Author
+
+ash-kernel 
+
+MADE WITH ❤️
+
+## My other works
+### SpiceDeck - Your Games, One Launcher.
+
+<a href="https://github.com/ash-kernel/spicedeck">
+  <img src="https://github.com/ash-kernel/ash-kernel/blob/main/banner1.png?raw=true" width=400 />
+</a>
