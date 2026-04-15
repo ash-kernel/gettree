@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import re
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -12,6 +13,15 @@ import typer
 from colorama import Fore, Style, init
 from rich.tree import Tree
 from rich import print as rprint
+
+# Try tomllib (Python 3.11+), fallback to tomli
+try:
+    import tomllib
+except ImportError:
+    try:
+        import tomli as tomllib
+    except ImportError:
+        tomllib = None
 
 # IMPORTANT: convert=True fixes Windows color issues
 init(autoreset=True, convert=True)
@@ -60,11 +70,20 @@ class TreeStats:
         }
 
 
-def load_ignore_spec(root: Path) -> Optional[pathspec.PathSpec]:
-    """Load and merge .gitignore and .gettreeignore patterns."""
+def load_ignore_spec(root: Path, use_gitignore: bool = True, use_gettreeignore: bool = True, 
+                     use_dockerignore: bool = False) -> Optional[pathspec.PathSpec]:
+    """Load and merge ignore patterns from .gitignore, .gettreeignore, and .dockerignore."""
     patterns = []
     
-    for ignore_file in [".gitignore", ".gettreeignore"]:
+    ignore_files = []
+    if use_gitignore:
+        ignore_files.append(".gitignore")
+    if use_gettreeignore:
+        ignore_files.append(".gettreeignore")
+    if use_dockerignore:
+        ignore_files.append(".dockerignore")
+    
+    for ignore_file in ignore_files:
         path = root / ignore_file
         if path.exists():
             try:
@@ -75,6 +94,22 @@ def load_ignore_spec(root: Path) -> Optional[pathspec.PathSpec]:
     if patterns:
         return pathspec.PathSpec.from_lines("gitwildmatch", patterns)
     return None
+
+
+def load_config() -> dict:
+    """Load config from ~/.config/gettree/config.toml"""
+    if not tomllib:
+        return {}
+    
+    config_path = Path.home() / ".config" / "gettree" / "config.toml"
+    if not config_path.exists():
+        return {}
+    
+    try:
+        with open(config_path, "rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return {}
 
 
 def strip_ansi(text: str) -> str:
@@ -329,8 +364,18 @@ def main(
     watch: bool = typer.Option(False, "--watch", "-w", help="Watch mode (refresh every 2s)"),
     tui: bool = typer.Option(False, "--tui", help="Rich interactive tree view"),
     stats: bool = typer.Option(False, "--stats", help="Show summary statistics"),
+    dockerignore: bool = typer.Option(False, "--dockerignore", help="Include .dockerignore patterns"),
 ) -> None:
     """Generate and display folder trees with advanced features."""
+    
+    # Load config file
+    config = load_config()
+    
+    # Merge: CLI > config > defaults
+    use_dockerignore = dockerignore or config.get("use_dockerignore", False)
+    use_color = color or config.get("color", False)
+    use_icons = icons or config.get("icons", False)
+    use_depth = depth if depth is not None else config.get("depth", None)
     
     def run_once():
         root = Path(path).resolve()
@@ -340,7 +385,7 @@ def main(
             raise typer.Exit(1)
         
         scan_start = time.time()
-        spec = load_ignore_spec(root)
+        spec = load_ignore_spec(root, use_dockerignore=use_dockerignore)
         extra = set(ignore or [])
         tree_stats = TreeStats()
         
@@ -349,7 +394,7 @@ def main(
             return
         
         if json_mode:
-            tree_dict = build_tree_dict(root, root, spec, extra, depth, 1, tree_stats, 
+            tree_dict = build_tree_dict(root, root, spec, extra, use_depth, 1, tree_stats, 
                                        filter_pattern, sort_by)
             result = {
                 "root": str(root) if fullpath else root.name,
@@ -376,8 +421,8 @@ def main(
         header = str(root) if fullpath else root.name
         output_lines.append(header)
         
-        generate_tree(root, root, spec, "", output_lines, 1, depth, 
-                     icons, color, size, extra, tree_stats, filter_pattern, sort_by)
+        generate_tree(root, root, spec, "", output_lines, 1, use_depth, 
+                     use_icons, use_color, size, extra, tree_stats, filter_pattern, sort_by)
         
         if stats:
             tree_stats.scan_time = time.time() - scan_start

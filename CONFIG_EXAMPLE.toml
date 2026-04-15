@@ -1,0 +1,17 @@
+# gettree config file
+# Location: ~/.config/gettree/config.toml
+
+# Include patterns from ignore files
+use_gitignore = true
+use_gettreeignore = true
+use_dockerignore = false  # Set to true to include .dockerignore
+
+# Display options
+color = true       # Enable colors by default
+icons = false      # Show icons by default
+depth = null       # Max depth (null = unlimited)
+
+# Other defaults can be set here
+# Example:
+# depth = 3
+# icons = true
