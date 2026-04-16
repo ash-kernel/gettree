@@ -9,9 +9,7 @@ use_dockerignore = false  # Set to true to include .dockerignore
 # Display options
 color = true       # Enable colors by default
 icons = false      # Show icons by default
-depth = null       # Max depth (null = unlimited)
+omit_ignored = true  # true = hide ignored files, false = show them
 
-# Other defaults can be set here
-# Example:
-# depth = 3
-# icons = true
+# Max depth (comment out or remove for unlimited)
+# depth = 3       

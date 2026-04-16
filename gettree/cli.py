@@ -153,8 +153,10 @@ def color_name(name: str, is_dir: bool) -> str:
     return name
 
 
-def should_ignore(item: str, rel_path: str, spec: Optional[pathspec.PathSpec], extra: set) -> bool:
-    """Check if item should be ignored."""
+def should_ignore(item: str, rel_path: str, spec: Optional[pathspec.PathSpec], extra: set, omit_ignored: bool = True) -> bool:
+    """Check if item should be ignored. If omit_ignored is False, returns False (shows all items)."""
+    if not omit_ignored:
+        return False
     if item in DEFAULT_IGNORES or item in extra:
         return True
     if spec and spec.match_file(rel_path):
@@ -187,7 +189,7 @@ def sort_items(items: list, sort_by: str = "name") -> list:
 def build_tree_dict(path: Path, root: Path, spec: Optional[pathspec.PathSpec], 
                     extra: set, max_depth: Optional[int], depth: int, 
                     stats: TreeStats, filter_pattern: Optional[str] = None,
-                    sort_by: str = "name") -> dict:
+                    sort_by: str = "name", omit_ignored: bool = True) -> dict:
     """Build tree structure as dictionary for JSON export."""
     if max_depth is not None and depth > max_depth:
         return {}
@@ -205,7 +207,7 @@ def build_tree_dict(path: Path, root: Path, spec: Optional[pathspec.PathSpec],
         rel_path = str(item.relative_to(root))
         is_dir = item.is_dir()
         
-        if should_ignore(item.name, rel_path, spec, extra):
+        if should_ignore(item.name, rel_path, spec, extra, omit_ignored):
             continue
         
         if not matches_filter(item.name, filter_pattern, is_dir):
@@ -214,7 +216,7 @@ def build_tree_dict(path: Path, root: Path, spec: Optional[pathspec.PathSpec],
         if is_dir:
             stats.folders += 1
             tree_dict[item.name] = build_tree_dict(
-                item, root, spec, extra, max_depth, depth + 1, stats, filter_pattern, sort_by
+                item, root, spec, extra, max_depth, depth + 1, stats, filter_pattern, sort_by, omit_ignored
             )
         else:
             stats.files += 1
@@ -232,7 +234,7 @@ def generate_tree(path: Path, root: Path, spec: Optional[pathspec.PathSpec],
                   prefix: str, output: list, depth: int, max_depth: Optional[int],
                   icons: bool, color: bool, size: bool, extra: set, 
                   stats: TreeStats, filter_pattern: Optional[str] = None,
-                  sort_by: str = "name") -> None:
+                  sort_by: str = "name", omit_ignored: bool = True) -> None:
     """Generate tree output with text formatting."""
     if max_depth is not None and depth > max_depth:
         return
@@ -247,7 +249,7 @@ def generate_tree(path: Path, root: Path, spec: Optional[pathspec.PathSpec],
     filtered = []
     for item in items:
         rel_path = str(item.relative_to(root))
-        if should_ignore(item.name, rel_path, spec, extra):
+        if should_ignore(item.name, rel_path, spec, extra, omit_ignored):
             continue
         is_dir = item.is_dir()
         if matches_filter(item.name, filter_pattern, is_dir):
@@ -288,10 +290,10 @@ def generate_tree(path: Path, root: Path, spec: Optional[pathspec.PathSpec],
             ext = "│   " if pointer == "├── " else "    "
             generate_tree(item, root, spec, prefix + ext, output, 
                          depth + 1, max_depth, icons, color, size, extra, stats, 
-                         filter_pattern, sort_by)
+                         filter_pattern, sort_by, omit_ignored)
 
 
-def run_tui(root: Path, spec: Optional[pathspec.PathSpec], extra: set) -> None:
+def run_tui(root: Path, spec: Optional[pathspec.PathSpec], extra: set, omit_ignored: bool = True) -> None:
     """Display tree in rich TUI format."""
     def build(path: Path, tree: Tree) -> None:
         try:
@@ -301,7 +303,7 @@ def run_tui(root: Path, spec: Optional[pathspec.PathSpec], extra: set) -> None:
         
         for item in items:
             rel_path = str(item.relative_to(root))
-            if should_ignore(item.name, rel_path, spec, extra):
+            if should_ignore(item.name, rel_path, spec, extra, omit_ignored):
                 continue
             
             label = f"[bold blue]{item.name}[/]" if item.is_dir() else item.name
@@ -365,6 +367,7 @@ def main(
     tui: bool = typer.Option(False, "--tui", help="Rich interactive tree view"),
     stats: bool = typer.Option(False, "--stats", help="Show summary statistics"),
     dockerignore: bool = typer.Option(False, "--dockerignore", help="Include .dockerignore patterns"),
+    omit_ignored: Optional[bool] = typer.Option(None, "--omit-ignored/--show-ignored", help="Hide/show ignored files"),
 ) -> None:
     """Generate and display folder trees with advanced features."""
     
@@ -376,6 +379,7 @@ def main(
     use_color = color or config.get("color", False)
     use_icons = icons or config.get("icons", False)
     use_depth = depth if depth is not None else config.get("depth", None)
+    use_omit_ignored = omit_ignored if omit_ignored is not None else config.get("omit_ignored", True)
     
     def run_once():
         root = Path(path).resolve()
@@ -390,12 +394,12 @@ def main(
         tree_stats = TreeStats()
         
         if tui:
-            run_tui(root, spec, extra)
+            run_tui(root, spec, extra, use_omit_ignored)
             return
         
         if json_mode:
             tree_dict = build_tree_dict(root, root, spec, extra, use_depth, 1, tree_stats, 
-                                       filter_pattern, sort_by)
+                                       filter_pattern, sort_by, use_omit_ignored)
             result = {
                 "root": str(root) if fullpath else root.name,
                 "tree": tree_dict,
@@ -422,7 +426,7 @@ def main(
         output_lines.append(header)
         
         generate_tree(root, root, spec, "", output_lines, 1, use_depth, 
-                     use_icons, use_color, size, extra, tree_stats, filter_pattern, sort_by)
+                     use_icons, use_color, size, extra, tree_stats, filter_pattern, sort_by, use_omit_ignored)
         
         if stats:
             tree_stats.scan_time = time.time() - scan_start
