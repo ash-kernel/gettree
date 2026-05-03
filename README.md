@@ -1,18 +1,18 @@
 <div align="center">
 
-# gettree
+# Gettree
 
-<img src="https://raw.githubusercontent.com/ash-kernel/gettree/main/assets/logo.png" width="140"/>
+<img src="https://raw.githubusercontent.com/ash-kernel/gettree/main/assets/logo.png" width="140" alt="gettree logo"/>
 
-**Modern tree CLI with ignore support, filtering, and exports**
+**A blazing fast, modern directory tree generator with smart ignores, regex filtering, and rich data exports.**
 
 <br/>
 
-<img src="https://img.shields.io/badge/Python-CLI-blue?logo=python" />
-<img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-lightgrey" />
-<img src="https://img.shields.io/badge/License-MIT-green" />
+<img src="https://img.shields.io/badge/Python-3.8%2B-blue?logo=python&logoColor=white" alt="Python Version" />
+<img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platforms" />
+<img src="https://img.shields.io/badge/License-MIT-green" alt="License" />
 <a href="https://pypi.org/project/gettree/">
-  <img src="https://img.shields.io/pypi/v/gettree?label=PyPI" />
+  <img src="https://img.shields.io/pypi/v/gettree?color=orange&logo=pypi&logoColor=white" alt="PyPI Version" />
 </a>
 
 </div>
@@ -21,19 +21,23 @@
 
 ## Overview
 
-`gettree` is a fast CLI to visualize directory structures with:
-- ignore rules
-- filterings
-- sorting
-- multiple export formats
+`gettree` is a next-generation CLI tool designed to replace the traditional `tree` command. Built for modern developer workflows, it automatically respects your ignore files, allows complex regex filtering, sorts by size or type, and exports your directory structures into actionable data formats (JSON, CSV, Markdown).
+
+### Why gettree?
+*   **Blazing Fast:** Utilizes optimized `os.scandir()` caching to traverse massive directories in milliseconds without redundant system calls.
+*   **Smart Ignores:** Natively reads `.gitignore`, `.dockerignore`, and custom `.gettreeignore` files.
+*   **Beautiful UI:** Full color support, file-specific emoji icons, and a flicker-free interactive Watch Mode.
+*   **Data-Ready:** Export your folder structures directly to structured JSON or CSV for downstream scripting.
 
 ---
 
-## Install
+## Installation
+
+Available natively via PyPI.
 
     pip install gettree
 
-or
+Or install the latest bleeding-edge version directly from GitHub:
 
     pip install git+https://github.com/ash-kernel/gettree.git
 
@@ -41,187 +45,125 @@ or
 
 ## Usage
 
-    gettree [path] [options]
+    gettree [PATH] [OPTIONS]
 
 ### Quick Start
-
-    gettree .                              # Basic tree
-    gettree . --color --icons --stats      # With display options
-    gettree . --filter "\.py$"             # Filter files
-    gettree . --sort size --size           # Sort and show sizes
-    gettree . --json -o tree.json          # Export to JSON
-    gettree . --markdown -o tree.md        # Export to Markdown
-
----
-
-## Features
-
-- `.gitignore` + `.gettreeignore` + `.dockerignore` support
-- Regex filtering (`--filter`)
-- Sorting by name, size, or type
-- File size display + depth control
-- JSON / CSV / Markdown export
-- Statistics (files, folders, size, scan time)
-- Watch mode + Interactive TUI
-- Config file support (`~/.config/gettree/config.toml`)
-- Windows + Linux compatible
+    gettree .                                  # Basic tree
+    gettree . --color --icons --stats          # Full visual experience
+    gettree . --filter "\.py$"                 # Regex: Show only Python files
+    gettree . --sort size --size               # Sort by size (largest first)
+    gettree . --json -o tree.json              # Export structure to JSON
+    gettree . --markdown -o docs/tree.md       # Export wrapped in Markdown
 
 ---
 
 ## Options
 
-**Display:**
-- `--color, -c` - Enable colored output
-- `--icons` - Show emoji icons
-- `--size, -s` - Display file sizes
-- `--depth, -d N` - Maximum traversal depth
-- `--fullpath` - Show absolute paths
-- `--stats` - Show summary statistics
+### Display & UI
+| Flag | Description |
+|---|---|
+| `--color`, `-c` | Enable syntax-highlighted colored output. |
+| `--icons` | Show file-specific emoji icons (🐍, 🌐, 📄, etc.). |
+| `--size`, `-s` | Display human-readable file sizes. |
+| `--depth`, `-d N` | Limit maximum folder traversal depth. |
+| `--fullpath` | Show absolute paths instead of relative names. |
+| `--stats` | Append a summary block (files, folders, size, scan time). |
 
-**Output Formats:**
-- `--json` - Output as structured JSON
-- `--csv` - Export as CSV (use with -o)
-- `--markdown` - Wrap in markdown code block
-- `--output, -o FILE` - Save to file
+### Output & Export
+| Flag | Description |
+|---|---|
+| `--json` | Output as structured, nested JSON. |
+| `--csv` | Export as a flat CSV file (requires `-o`). |
+| `--markdown` | Wrap standard text output in a markdown code block. |
+| `--output`, `-o FILE`| Save the generated output to a specific file. |
 
-**Filtering & Sorting:**
-- `--filter, -f PATTERN` - Filter by regex pattern
-- `--sort TYPE` - Sort by: name|size|type [default: name]
-- `--ignore, -i PATTERN` - Extra patterns to exclude
+### Filtering & Sorting
+| Flag | Description |
+|---|---|
+| `--filter`, `-f PAT` | Filter items using a Regex pattern. |
+| `--sort TYPE` | Sort items by: `name`, `size`, or `type`. [Default: `name`] |
+| `--ignore`, `-i PAT` | Add extra ad-hoc patterns to exclude. |
+| `--show-ignored` | Force display of ignored files/folders. |
 
-**Ignore Rules:**
-- `--dockerignore` - Include .dockerignore patterns (disabled by default)
-
-**Advanced:**
-- `--watch, -w` - Watch mode (refresh every 2s)
-- `--tui` - Rich interactive tree view
+### Advanced Modes
+| Flag | Description |
+|---|---|
+| `--watch`, `-w` | **Watch Mode:** Live-reload the tree every 2s (flicker-free). |
+| `--tui` | **TUI Mode:** Open a rich, interactive tree view. |
+| `--dockerignore` | Explicitly include `.dockerignore` patterns. |
 
 ---
 
 ## Ignore Rules
 
-Automatically loads and merges patterns from:
+`gettree` prevents terminal spam by automatically ignoring heavy folders (`node_modules`, `.git`, `__pycache__`) and seamlessly reading your project's ignore rules.
 
-- `.gitignore` - Standard git ignore rules (loaded by default)
-- `.gettreeignore` - Custom project-specific rules (loaded by default)
-- `.dockerignore` - Docker ignore rules (use `--dockerignore` to enable)
+Patterns are loaded and merged from:
+1.  `.gitignore` (Loaded by default)
+2.  `.gettreeignore` (Custom project rules, loaded by default)
+3.  `.dockerignore` (Requires `--dockerignore` flag)
 
-### Example .gettreeignore
-```
-*.log
-dist/
-temp/
-*.tmp
-```
+### Example `.gettreeignore`
+
+    *.log
+    dist/
+    temp/
+    secret_keys.json
 
 ---
 
 ## Configuration
 
-Create `~/.config/gettree/config.toml` to set defaults:
+Tired of typing `--color --icons` every time? Create a persistent configuration file at `~/.config/gettree/config.toml` to set your defaults.
 
-```toml
-# Ignore Files
-use_gitignore = true
-use_gettreeignore = true
-use_dockerignore = false
+**Priority Order:** CLI Arguments > Config File > Built-in Defaults
 
-# Display Options
-color = true       # Enable colors by default
-icons = false      # Show icons by default
-depth = null       # Max depth (null = unlimited)
-```
+    # ~/.config/gettree/config.toml
+    
+    # Ignore Settings
+    use_gitignore = true
+    use_gettreeignore = true
+    use_dockerignore = false
+    omit_ignored = true
+    
+    # Display Defaults
+    color = true       # Always use colors
+    icons = true       # Always show icons
+    depth = null       # Max depth (null = unlimited)
 
-**Priority:** CLI arguments > config file > built-in defaults
-
-### Setup:
-```bash
-mkdir -p ~/.config/gettree
-touch ~/.config/gettree/config.toml
-```
-
-Then edit the config file with your preferred defaults.
+*(Note: Windows users can create this file at `C:\Users\YourName\.config\gettree\config.toml`)*
 
 ---
 
-## Real-World Examples
+## Real-World Recipes
 
-**View project structure:**
-```bash
-gettree .
-gettree . --depth 2
-```
+**Audit a massive project:**
+    gettree . --sort size --size --color --depth 3 --stats
 
-**With visuals:**
-```bash
-gettree . --color --icons --size --stats
-```
+**Find all TypeScript files & save to Markdown:**
+    gettree . --filter "\.tsx?$" --markdown -o frontend_structure.md
 
-**Find all Python files:**
-```bash
-gettree . --filter "\.py$" --color --icons
-```
-
-**Export for documentation:**
-```bash
-gettree . --markdown --depth 3 -o STRUCTURE.md
-gettree . --json --stats -o structure.json
-```
-
-**Monitor during development:**
-```bash
-gettree . --watch --color --stats
-```
-
-**Docker-aware tree:**
-```bash
-gettree . --dockerignore --color --icons
-```
-
-**Sort by file size (largest first):**
-```bash
-gettree . --sort size --size --color --depth 2
-```
-
----
-
-## Example Output
-
-```
-Project
-├── 📁 src
-│   ├── 🐍 main.py (2.3KB)
-│   └── 🐍 utils.py (1.1KB)
-├── 📁 tests
-│   └── 🐍 test_main.py (890B)
-├── 📝 README.md (5.6KB)
-└── 📄 pyproject.toml (569B)
-
-📊 Summary:
-  Files: 4
-  Folders: 2
-  Total Size: 9.8KB
-  Scan Time: 2.1ms
-```
+**Monitor an active build directory:**
+    gettree ./dist --watch --color --stats
 
 ---
 
 ## Performance
 
-- Small projects (<100 files): <5ms
-- Medium projects (<1000 files): 5-50ms
-- Large projects (>1000 files): 50-500ms
+Thanks to `os.scandir()` caching and optimized memory handling, `gettree` is built for speed:
+*   **Small projects** (< 100 files): `< 5ms`
+*   **Medium projects** (< 1,000 files): `5 - 50ms`
+*   **Massive projects** (> 10,000 files): `50 - 500ms`
 
 ---
 
-## License
+## 📄 License
 
-MIT
+Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 
-## Author
-
-**ash-kernel** - [GitHub](https://github.com/ash-kernel)
-
-Made with ❤️
+<div align="center">
+  <b>Developed by Ash</b><br>
+  <a href="https://github.com/ash-kernel">GitHub</a> • <a href="https://pypi.org/project/gettree/">PyPI</a>
+</div>

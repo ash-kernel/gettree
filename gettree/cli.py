@@ -2,11 +2,9 @@ import csv
 import json
 import os
 import re
-import sys
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 import pathspec
 import typer
@@ -30,7 +28,7 @@ init(autoreset=True, convert=True)
 ANSI_ESCAPE = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
 
 app = typer.Typer(
-    help="🔥 gettree - modern folder tree generator",
+    help="🔥 gettree - modern folder tree generator (God Mode)",
     no_args_is_help=True,
     pretty_exceptions_enable=False,
 )
@@ -72,23 +70,20 @@ class TreeStats:
 
 def load_ignore_spec(root: Path, use_gitignore: bool = True, use_gettreeignore: bool = True, 
                      use_dockerignore: bool = False) -> Optional[pathspec.PathSpec]:
-    """Load and merge ignore patterns from .gitignore, .gettreeignore, and .dockerignore."""
+    """Load and merge ignore patterns."""
     patterns = []
-    
     ignore_files = []
-    if use_gitignore:
-        ignore_files.append(".gitignore")
-    if use_gettreeignore:
-        ignore_files.append(".gettreeignore")
-    if use_dockerignore:
-        ignore_files.append(".dockerignore")
+    
+    if use_gitignore: ignore_files.append(".gitignore")
+    if use_gettreeignore: ignore_files.append(".gettreeignore")
+    if use_dockerignore: ignore_files.append(".dockerignore")
     
     for ignore_file in ignore_files:
         path = root / ignore_file
         if path.exists():
             try:
                 patterns.extend(path.read_text().splitlines())
-            except Exception:
+            except OSError:
                 pass
     
     if patterns:
@@ -108,17 +103,15 @@ def load_config() -> dict:
     try:
         with open(config_path, "rb") as f:
             return tomllib.load(f)
-    except Exception:
+    except OSError:
         return {}
 
 
 def strip_ansi(text: str) -> str:
-    """Remove ANSI color codes from text."""
     return ANSI_ESCAPE.sub("", text)
 
 
 def format_size(size: int) -> str:
-    """Format bytes to human-readable size."""
     for unit in ["B", "KB", "MB", "GB"]:
         if size < 1024:
             return f"{size:.1f}{unit}"
@@ -127,221 +120,161 @@ def format_size(size: int) -> str:
 
 
 def get_icon(name: str, is_dir: bool) -> str:
-    """Get emoji icon for file/folder."""
-    if is_dir:
-        return ICONS["folder"]
-    ext = Path(name).suffix
-    return ICONS.get(ext, ICONS["file"])
+    if is_dir: return ICONS["folder"]
+    return ICONS.get(Path(name).suffix, ICONS["file"])
 
 
 def color_name(name: str, is_dir: bool) -> str:
-    """Apply color coding to name based on type."""
-    if is_dir:
-        return Fore.BLUE + name + Style.RESET_ALL
-    
-    ext = Path(name).suffix
+    if is_dir: return Fore.BLUE + name + Style.RESET_ALL
     color_map = {
-        ".py": Fore.GREEN,
-        ".js": Fore.YELLOW,
-        ".ts": Fore.YELLOW,
-        ".json": Fore.CYAN,
-        ".md": Fore.MAGENTA,
+        ".py": Fore.GREEN, ".js": Fore.YELLOW, ".ts": Fore.YELLOW,
+        ".json": Fore.CYAN, ".md": Fore.MAGENTA,
     }
-    
-    if ext in color_map:
-        return color_map[ext] + name + Style.RESET_ALL
-    return name
+    return color_map.get(Path(name).suffix, "") + name + Style.RESET_ALL if Path(name).suffix in color_map else name
 
 
 def should_ignore(item: str, rel_path: str, spec: Optional[pathspec.PathSpec], extra: set, omit_ignored: bool = True) -> bool:
-    """Check if item should be ignored. If omit_ignored is False, returns False (shows all items)."""
-    if not omit_ignored:
-        return False
-    if item in DEFAULT_IGNORES or item in extra:
-        return True
-    if spec and spec.match_file(rel_path):
-        return True
+    if not omit_ignored: return False
+    if item in DEFAULT_IGNORES or item in extra: return True
+    if spec and spec.match_file(rel_path): return True
     return False
 
 
 def matches_filter(name: str, filter_pattern: Optional[str], is_dir: bool) -> bool:
-    """Check if name matches filter pattern. Directories always match (for traversal)."""
-    if not filter_pattern:
-        return True
-    if is_dir:
-        return True  # Always traverse directories
+    if not filter_pattern or is_dir: return True
     try:
         return re.search(filter_pattern, name, re.IGNORECASE) is not None
     except re.error:
         return True
 
 
-def sort_items(items: list, sort_by: str = "name") -> list:
-    """Sort items by name, size, or type."""
+def get_sorted_entries(path: str, sort_by: str) -> List[os.DirEntry]:
+    """Optimized directory fetching and sorting using cached DirEntry attributes."""
+    try:
+        with os.scandir(path) as it:
+            entries = list(it)
+    except (PermissionError, OSError):
+        return []
+
     if sort_by == "size":
-        return sorted(items, key=lambda x: x.stat().st_size if x.is_file() else 0, reverse=True)
+        return sorted(entries, key=lambda x: x.stat(follow_symlinks=False).st_size if not x.is_dir() else 0, reverse=True)
     elif sort_by == "type":
-        return sorted(items, key=lambda x: (not x.is_dir(), x.name.lower()))
-    else:  # name (default) - dirs first
-        return sorted(items, key=lambda x: (not x.is_dir(), x.name.lower()))
+        return sorted(entries, key=lambda x: (not x.is_dir(), x.name.lower()))
+    else:  # name
+        return sorted(entries, key=lambda x: (not x.is_dir(), x.name.lower()))
 
 
-def build_tree_dict(path: Path, root: Path, spec: Optional[pathspec.PathSpec], 
+def build_tree_dict(path_str: str, root_str: str, spec: Optional[pathspec.PathSpec], 
                     extra: set, max_depth: Optional[int], depth: int, 
                     stats: TreeStats, filter_pattern: Optional[str] = None,
                     sort_by: str = "name", omit_ignored: bool = True) -> dict:
-    """Build tree structure as dictionary for JSON export."""
-    if max_depth is not None and depth > max_depth:
-        return {}
     
+    if max_depth is not None and depth > max_depth: return {}
     stats.max_depth_reached = max(stats.max_depth_reached, depth)
     
-    try:
-        items = sort_items(path.iterdir(), sort_by)
-    except (PermissionError, OSError):
-        return {}
-    
     tree_dict = {}
+    entries = get_sorted_entries(path_str, sort_by)
     
-    for item in items:
-        rel_path = str(item.relative_to(root))
-        is_dir = item.is_dir()
+    for entry in entries:
+        rel_path = os.path.relpath(entry.path, root_str)
+        is_dir = entry.is_dir(follow_symlinks=False)
         
-        if should_ignore(item.name, rel_path, spec, extra, omit_ignored):
-            continue
-        
-        if not matches_filter(item.name, filter_pattern, is_dir):
-            continue
+        if should_ignore(entry.name, rel_path, spec, extra, omit_ignored): continue
+        if not matches_filter(entry.name, filter_pattern, is_dir): continue
         
         if is_dir:
             stats.folders += 1
-            tree_dict[item.name] = build_tree_dict(
-                item, root, spec, extra, max_depth, depth + 1, stats, filter_pattern, sort_by, omit_ignored
+            tree_dict[entry.name] = build_tree_dict(
+                entry.path, root_str, spec, extra, max_depth, depth + 1, stats, filter_pattern, sort_by, omit_ignored
             )
         else:
             stats.files += 1
             try:
-                size = item.stat().st_size
+                size = entry.stat(follow_symlinks=False).st_size
                 stats.total_size += size
-                tree_dict[item.name] = {"__size__": size}
+                tree_dict[entry.name] = {"__size__": size}
             except OSError:
-                tree_dict[item.name] = {}
-    
+                tree_dict[entry.name] = {}
+                
     return tree_dict
 
 
-def generate_tree(path: Path, root: Path, spec: Optional[pathspec.PathSpec], 
+def generate_tree(path_str: str, root_str: str, spec: Optional[pathspec.PathSpec], 
                   prefix: str, output: list, depth: int, max_depth: Optional[int],
                   icons: bool, color: bool, size: bool, extra: set, 
                   stats: TreeStats, filter_pattern: Optional[str] = None,
                   sort_by: str = "name", omit_ignored: bool = True) -> None:
-    """Generate tree output with text formatting."""
-    if max_depth is not None and depth > max_depth:
-        return
-    
+                  
+    if max_depth is not None and depth > max_depth: return
     stats.max_depth_reached = max(stats.max_depth_reached, depth)
     
-    try:
-        items = sort_items(path.iterdir(), sort_by)
-    except (PermissionError, OSError):
-        return
-    
+    entries = get_sorted_entries(path_str, sort_by)
     filtered = []
-    for item in items:
-        rel_path = str(item.relative_to(root))
-        if should_ignore(item.name, rel_path, spec, extra, omit_ignored):
-            continue
-        is_dir = item.is_dir()
-        if matches_filter(item.name, filter_pattern, is_dir):
-            filtered.append(item)
     
-    if not filtered:
-        return
+    for entry in entries:
+        rel_path = os.path.relpath(entry.path, root_str)
+        is_dir = entry.is_dir(follow_symlinks=False)
+        if not should_ignore(entry.name, rel_path, spec, extra, omit_ignored) and matches_filter(entry.name, filter_pattern, is_dir):
+            filtered.append((entry, is_dir))
     
+    if not filtered: return
     pointers = ["├── "] * (len(filtered) - 1) + ["└── "]
     
-    for pointer, item in zip(pointers, filtered):
-        is_dir = item.is_dir()
+    for pointer, (entry, is_dir) in zip(pointers, filtered):
+        if is_dir: stats.folders += 1
+        else: stats.files += 1
         
-        if is_dir:
-            stats.folders += 1
-        else:
-            stats.files += 1
-        
-        # Build display name
-        icon = f"{get_icon(item.name, is_dir)} " if icons else ""
-        name = item.name
-        
-        if color:
-            name = color_name(name, is_dir)
+        icon = f"{get_icon(entry.name, is_dir)} " if icons else ""
+        name = color_name(entry.name, is_dir) if color else entry.name
         
         if size and not is_dir:
             try:
-                file_size = item.stat().st_size
+                file_size = entry.stat(follow_symlinks=False).st_size
                 stats.total_size += file_size
                 name += f" ({format_size(file_size)})"
             except OSError:
                 pass
         
-        line = prefix + pointer + icon + name
-        output.append(line)
+        output.append(prefix + pointer + icon + name)
         
         if is_dir:
             ext = "│   " if pointer == "├── " else "    "
-            generate_tree(item, root, spec, prefix + ext, output, 
+            generate_tree(entry.path, root_str, spec, prefix + ext, output, 
                          depth + 1, max_depth, icons, color, size, extra, stats, 
                          filter_pattern, sort_by, omit_ignored)
 
 
-def run_tui(root: Path, spec: Optional[pathspec.PathSpec], extra: set, omit_ignored: bool = True) -> None:
-    """Display tree in rich TUI format."""
-    def build(path: Path, tree: Tree) -> None:
-        try:
-            items = sorted(path.iterdir())
-        except (PermissionError, OSError):
-            return
-        
-        for item in items:
-            rel_path = str(item.relative_to(root))
-            if should_ignore(item.name, rel_path, spec, extra, omit_ignored):
-                continue
+def run_tui(root_str: str, spec: Optional[pathspec.PathSpec], extra: set, omit_ignored: bool = True) -> None:
+    def build(path_str: str, tree: Tree) -> None:
+        entries = get_sorted_entries(path_str, "name")
+        for entry in entries:
+            rel_path = os.path.relpath(entry.path, root_str)
+            is_dir = entry.is_dir(follow_symlinks=False)
             
-            label = f"[bold blue]{item.name}[/]" if item.is_dir() else item.name
+            if should_ignore(entry.name, rel_path, spec, extra, omit_ignored): continue
+            
+            label = f"[bold blue]{entry.name}[/]" if is_dir else entry.name
             branch = tree.add(label)
+            if is_dir: build(entry.path, branch)
             
-            if item.is_dir():
-                build(item, branch)
-    
-    tree = Tree(f"[bold green]{root.name}[/]")
-    build(root, tree)
+    root_name = os.path.basename(os.path.abspath(root_str))
+    tree = Tree(f"[bold green]{root_name}[/]")
+    build(root_str, tree)
     rprint(tree)
 
 
 def export_csv(tree_dict: dict, root_name: str, output_path: str, parent: str = "") -> None:
-    """Export tree structure to CSV format."""
     rows = []
-    
     def traverse(node: dict, prefix: str = ""):
         for name, value in sorted(node.items()):
             if isinstance(value, dict):
                 if "__size__" in value:
-                    # File
-                    rows.append({
-                        "path": prefix + name,
-                        "type": "file",
-                        "size": value.get("__size__", 0)
-                    })
+                    rows.append({"path": prefix + name, "type": "file", "size": value.get("__size__", 0)})
                 else:
-                    # Directory
-                    rows.append({
-                        "path": prefix + name,
-                        "type": "dir",
-                        "size": ""
-                    })
+                    rows.append({"path": prefix + name, "type": "dir", "size": ""})
                     traverse(value, prefix + name + "/")
     
     traverse(tree_dict)
-    
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["path", "type", "size"])
         writer.writeheader()
@@ -355,7 +288,7 @@ def main(
     markdown: bool = typer.Option(False, "--markdown", help="Wrap output in markdown code block"),
     json_mode: bool = typer.Option(False, "--json", help="Output as structured JSON"),
     csv_export: bool = typer.Option(False, "--csv", help="Export as CSV (use with -o)"),
-    ignore: Optional[list[str]] = typer.Option(None, "--ignore", "-i", help="Extra patterns to ignore"),
+    ignore: Optional[List[str]] = typer.Option(None, "--ignore", "-i", help="Extra patterns to ignore"),
     filter_pattern: Optional[str] = typer.Option(None, "--filter", "-f", help="Filter by regex pattern"),
     sort_by: str = typer.Option("name", "--sort", help="Sort by: name|size|type"),
     fullpath: bool = typer.Option(False, "--fullpath", help="Show absolute paths"),
@@ -369,39 +302,36 @@ def main(
     dockerignore: bool = typer.Option(False, "--dockerignore", help="Include .dockerignore patterns"),
     omit_ignored: Optional[bool] = typer.Option(None, "--omit-ignored/--show-ignored", help="Hide/show ignored files"),
 ) -> None:
-    """Generate and display folder trees with advanced features."""
-    
-    # Load config file
     config = load_config()
     
-    # Merge: CLI > config > defaults
     use_dockerignore = dockerignore or config.get("use_dockerignore", False)
     use_color = color or config.get("color", False)
     use_icons = icons or config.get("icons", False)
     use_depth = depth if depth is not None else config.get("depth", None)
     use_omit_ignored = omit_ignored if omit_ignored is not None else config.get("omit_ignored", True)
     
+    root_path = Path(path).resolve()
+    if not root_path.exists():
+        typer.echo("❌ Path does not exist")
+        raise typer.Exit(1)
+        
+    root_str = str(root_path)
+
     def run_once():
-        root = Path(path).resolve()
-        
-        if not root.exists():
-            typer.echo("❌ Path does not exist")
-            raise typer.Exit(1)
-        
         scan_start = time.time()
-        spec = load_ignore_spec(root, use_dockerignore=use_dockerignore)
+        spec = load_ignore_spec(root_path, use_dockerignore=use_dockerignore)
         extra = set(ignore or [])
         tree_stats = TreeStats()
         
         if tui:
-            run_tui(root, spec, extra, use_omit_ignored)
+            run_tui(root_str, spec, extra, use_omit_ignored)
             return
-        
+            
         if json_mode:
-            tree_dict = build_tree_dict(root, root, spec, extra, use_depth, 1, tree_stats, 
+            tree_dict = build_tree_dict(root_str, root_str, spec, extra, use_depth, 1, tree_stats, 
                                        filter_pattern, sort_by, use_omit_ignored)
             result = {
-                "root": str(root) if fullpath else root.name,
+                "root": root_str if fullpath else root_path.name,
                 "tree": tree_dict,
             }
             if stats:
@@ -409,51 +339,47 @@ def main(
                 result["stats"] = tree_stats.to_dict()
             
             output_text = json.dumps(result, indent=2)
-            
             typer.echo(output_text)
+            
             if output:
                 if csv_export:
-                    export_csv(tree_dict, root.name, output)
+                    export_csv(tree_dict, root_path.name, output)
                     typer.echo(f"\n✅ Exported to {output} (CSV)")
                 else:
                     Path(output).write_text(output_text, encoding="utf-8")
                     typer.echo(f"\n✅ Saved to {output} (JSON)")
             return
-        
-        # Text mode
-        output_lines = []
-        header = str(root) if fullpath else root.name
-        output_lines.append(header)
-        
-        generate_tree(root, root, spec, "", output_lines, 1, use_depth, 
+
+        output_lines = [root_str if fullpath else root_path.name]
+        generate_tree(root_str, root_str, spec, "", output_lines, 1, use_depth, 
                      use_icons, use_color, size, extra, tree_stats, filter_pattern, sort_by, use_omit_ignored)
         
         if stats:
             tree_stats.scan_time = time.time() - scan_start
-            output_lines.append("")
-            output_lines.append("📊 Summary:")
-            output_lines.append(f"  Files: {tree_stats.files}")
-            output_lines.append(f"  Folders: {tree_stats.folders}")
-            output_lines.append(f"  Total Size: {format_size(tree_stats.total_size)}")
-            output_lines.append(f"  Max Depth: {tree_stats.max_depth_reached}")
-            output_lines.append(f"  Scan Time: {tree_stats.scan_time * 1000:.1f}ms")
-        
+            output_lines.extend([
+                "", "📊 Summary:",
+                f"  Files: {tree_stats.files}",
+                f"  Folders: {tree_stats.folders}",
+                f"  Total Size: {format_size(tree_stats.total_size)}",
+                f"  Max Depth: {tree_stats.max_depth_reached}",
+                f"  Scan Time: {tree_stats.scan_time * 1000:.1f}ms"
+            ])
+            
         if markdown:
             output_lines = ["```"] + output_lines + ["```"]
-        
+            
         result = "\n".join(output_lines)
         typer.echo(result)
         
         if output:
-            # Strip ANSI codes when writing to file
-            clean_result = strip_ansi(result)
-            Path(output).write_text(clean_result, encoding="utf-8")
+            Path(output).write_text(strip_ansi(result), encoding="utf-8")
             typer.echo(f"\n✅ Saved to {output}")
-    
+
     if watch:
         try:
             while True:
-                os.system("cls" if os.name == "nt" else "clear")
+                # Fast, flicker-free terminal clear using ANSI escape codes
+                print("\033[H\033[J", end="")
                 run_once()
                 time.sleep(2)
         except KeyboardInterrupt:
