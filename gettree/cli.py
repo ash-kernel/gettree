@@ -17,6 +17,7 @@ from typing import Optional, List, Tuple
 import pathspec
 import typer
 from colorama import Fore, Style, init
+from rich.markup import escape
 from rich.tree import Tree
 from rich import print as rprint
 from rich.console import Console
@@ -125,7 +126,7 @@ def load_config() -> dict:
         with open(config_path, "rb") as f:
             return tomllib.load(f)
     except Exception as e:
-        console.print(f"[yellow]⚠️  Warning: Could not load config: {e}[/yellow]")
+        console.print(f"[yellow]⚠️  Warning: Could not load config: {escape(str(e))}[/yellow]")
         return {}
 
 
@@ -438,7 +439,7 @@ def export_csv(tree_dict: dict, output_path: str) -> None:
             writer.writeheader()
             writer.writerows(rows)
     except OSError as e:
-        console.print(f"[red]❌ Error writing CSV file: {e}[/red]")
+        console.print(f"[red]❌ Error writing CSV file: {escape(str(e))}[/red]")
         raise typer.Exit(1)
 
 
@@ -447,9 +448,9 @@ def save_output(content: str, output_path: str, strip_colors: bool = True) -> No
     try:
         final_content = strip_ansi(content) if strip_colors else content
         Path(output_path).write_text(final_content, encoding="utf-8")
-        console.print(f"[green]✅ Saved to {output_path}[/green]")
+        console.print(f"[green]✅ Saved to {escape(output_path)}[/green]")
     except OSError as e:
-        console.print(f"[red]❌ Error writing file: {e}[/red]")
+        console.print(f"[red]❌ Error writing file: {escape(str(e))}[/red]")
         raise typer.Exit(1)
 
 
@@ -565,7 +566,9 @@ def main(
         raise typer.Exit(1)
 
     if sort_by not in ["name", "size", "type"]:
-        console.print(f"[red]❌ Error: Invalid sort option '{sort_by}'. Use: name, size, or type[/red]")
+        console.print(
+            f"[red]❌ Error: Invalid sort option '{escape(sort_by)}'. Use: name, size, or type[/red]"
+        )
         raise typer.Exit(1)
 
     # Load config with fallback
@@ -584,13 +587,13 @@ def main(
     try:
         root_path = Path(path).resolve()
         if not root_path.exists():
-            console.print(f"[red]❌ Error: Path does not exist: {path}[/red]")
+            console.print(f"[red]❌ Error: Path does not exist: {escape(path)}[/red]")
             raise typer.Exit(1)
         if not root_path.is_dir():
-            console.print(f"[red]❌ Error: Path is not a directory: {path}[/red]")
+            console.print(f"[red]❌ Error: Path is not a directory: {escape(path)}[/red]")
             raise typer.Exit(1)
     except (OSError, RuntimeError) as e:
-        console.print(f"[red]❌ Error resolving path: {e}[/red]")
+        console.print(f"[red]❌ Error resolving path: {escape(str(e))}[/red]")
         raise typer.Exit(1)
 
     root_str = str(root_path)
@@ -627,7 +630,7 @@ def main(
                     console.print("[red]❌ CSV export requires --output option[/red]")
                     raise typer.Exit(1)
                 export_csv(tree_dict, output)
-                console.print(f"[green]✅ CSV exported to {output}[/green]")
+                console.print(f"[green]✅ CSV exported to {escape(output)}[/green]")
                 return
 
             # JSON output
@@ -703,7 +706,7 @@ def main(
                 try:
                     run_once()
                 except Exception as e:
-                    console.print(f"[red]Error during scan: {e}[/red]")
+                    console.print(f"[red]Error during scan: {escape(str(e))}[/red]")
                 time.sleep(2)
         except KeyboardInterrupt:
             console.print("\n[yellow]👋 Stopped watching[/yellow]")
